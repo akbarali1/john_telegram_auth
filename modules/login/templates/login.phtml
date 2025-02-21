@@ -43,21 +43,36 @@ $this->layout(
     <div class="mt-3">
         <script async src="https://telegram.org/js/telegram-widget.js?22" data-telegram-login="john_auth_bot" data-size="large" data-radius="4" data-onauth="onTelegramAuth(user)" data-request-access="write"></script>
         <script type="text/javascript">
-            async function onTelegramAuth(user) {
+            function removeAlert(alertDiv) {
+                setTimeout(function () {
+                    alertDiv.fadeOut(500, function () {
+                        $(this).remove();
+                    });
+                }, 3000);
+            }
+
+            function onTelegramAuth(user) {
                 $.ajax({
                     url        : '/login/telegram/',
                     type       : 'POST',
                     contentType: 'application/json',
                     data       : JSON.stringify(user),
+                    beforeSend : function () {
+                        $(".alert.alert-danger").remove();
+                    },
                     success    : function (response) {
                         if (response.success) {
                             window.location.href = '/';
                         } else {
-                            alert(response.error);
+                            let alertDiv = $('<div class="alert alert-danger">' + response.error + '</div>');
+                            $("h4").after(alertDiv);
+                            removeAlert(alertDiv);
                         }
                     },
                     error      : function (xhr, status, error) {
-                        console.error('Xatolik:', error);
+                        let alertDiv = $('<div class="alert alert-danger">' + error + '</div>');
+                        $("h4").after(alertDiv);
+                        removeAlert(alertDiv);
                     }
                 });
             }

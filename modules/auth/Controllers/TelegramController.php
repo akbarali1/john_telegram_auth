@@ -51,7 +51,7 @@ class TelegramController extends BaseController
 			if (!$tgUser) {
 				$this->response([
 					'success' => false,
-					'error'   => 'Unauthorized 404',
+					'error'   => 'Authorization failed.',
 				]);
 			}
 			$loginUser = (new \Johncms\Users\User())->find($tgUser->user_id);
@@ -96,7 +96,7 @@ class TelegramController extends BaseController
 		
 		$this->response([
 			'success' => false,
-			'error'   => 'Unauthorized',
+			'error'   => 'Authorization failed.',
 		]);
 	}
 	
