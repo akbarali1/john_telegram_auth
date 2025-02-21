@@ -37,10 +37,6 @@ class UserAuthFactory extends UserFactory
 	{
 		$userToken = $this->request->getCookie(static::CookieToken, '', FILTER_SANITIZE_STRING);
 		$userId    = (int) $this->request->getCookie(static::CookieId, 0, FILTER_SANITIZE_NUMBER_INT);
-		//		print_r($_COOKIE);
-		//		die('asas');
-		//		echo $userId."<br>";
-		//		echo $userToken."<br>";
 		if ($userId && $userToken) {
 			return $this->authentication($userId, $userToken);
 		}
@@ -59,6 +55,13 @@ class UserAuthFactory extends UserFactory
 				->latest()
 				->first();
 			if ($accessToken && $this->checkPermit($user) && Carbon::parse($accessToken->expires_at)->gt(date('Y-m-d H:i:s'))) {
+				$path = $this->request->getUri()->getPath();
+				if ($path === '/login' || $path === '/register') {
+					$this->userUnset();
+					
+					return new User();
+				}
+				
 				$this->ipHistory($user);
 				$accessToken->update(['last_used_at' => date('Y-m-d H:i:s')]);
 				
