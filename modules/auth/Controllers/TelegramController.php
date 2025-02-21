@@ -68,26 +68,39 @@ class TelegramController extends BaseController
 				'sestime'      => time(),
 			]);
 			
-			$token = hash_hmac('sha512', uniqid((string) mt_rand(), true), $this->botToken);
-			setcookie(UserAuthFactory::CookieId, (string) $loginUser->id, time() + $this->expires * 24 * 3600, '/');
-			setcookie(UserAuthFactory::CookieToken, $token, time() + $this->expires * 24 * 3600, '/');
 			AccessToken::query()
 				->where('user_id', '=', $loginUser->id)
 				->where('telegram_id', '=', $tgUser->telegram_id)
 				->update([
 					"expires_at" => Carbon::now()->toDateTimeString(),
 				]);
-			
-			AccessToken::query()->create([
+			/** @var AccessToken $accessToken */
+			$accessToken = AccessToken::query()->create([
 				'user_id'      => $loginUser->id,
 				'telegram_id'  => $tgUser->telegram_id,
 				'name'         => 'Telegram',
-				'token'        => $token,
+				'token'        => 'undefined',
 				"user_agent"   => $_SERVER['HTTP_USER_AGENT'],
 				'ip_address'   => $_SERVER['REMOTE_ADDR'],
 				'last_used_at' => date('Y-m-d H:i:s'),
 				"expires_at"   => Carbon::now()->addDays($this->expires)->toDateTimeString(),
 			]);
+			
+			$token = $this->generateToken();
+			setcookie(UserAuthFactory::CookieId, (string) $loginUser->id, time() + $this->expires * 24 * 3600, '/');
+			setcookie(UserAuthFactory::CookieToken, $accessToken->id."|".$token, time() + $this->expires * 24 * 3600, '/');
+			
+			$accessToken->update([
+				'token' => $token,
+			]);
+			# TODO: add language support
+			$tgMessage = 'You have successfully logged in to the site.'.PHP_EOL;
+			$tgMessage .= 'ID: '.$loginUser->id.PHP_EOL;
+			$tgMessage .= 'Name: '.$loginUser->name.PHP_EOL;
+			$tgMessage .= 'User Agent: '.$_SERVER['HTTP_USER_AGENT'].PHP_EOL;
+			$tgMessage .= 'IP Address: '.$_SERVER['REMOTE_ADDR'].PHP_EOL;
+			
+			$this->sendMessage($tgUser->telegram_id, $tgMessage);
 			
 			$this->response([
 				'success' => true,
@@ -104,6 +117,11 @@ class TelegramController extends BaseController
 	{
 		header('Content-Type: application/json');
 		die(json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+	}
+	
+	private function generateToken(): string
+	{
+		return hash_hmac('sha512', uniqid((string) mt_rand(), true), $this->botToken);
 	}
 	
 	/**
@@ -123,14 +141,32 @@ class TelegramController extends BaseController
 		$hash              = hash_hmac('sha256', $data_check_string, $secret_key);
 		if (strcmp($hash, $check_hash) !== 0) {
 			return false;
-			//throw new Exception('Data is NOT from Telegram');
 		}
 		if ((time() - $authData['auth_date']) > 86400) {
 			return false;
-			//throw new Exception('Data is outdated');
 		}
 		
 		return true;
+	}
+	
+	private function sendMessage($chatId, $text): void
+	{
+		$this->sendTelegram('sendMessage', [
+			'chat_id' => $chatId,
+			'text'    => $text,
+		]);
+	}
+	
+	private function sendTelegram($method, $response): void
+	{
+		$ch = curl_init('https://api.telegram.org/bot'.$this->botToken.'/'.$method);
+		curl_setopt($ch, CURLOPT_POST, 1);
+		curl_setopt($ch, CURLOPT_POSTFIELDS, $response);
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_HEADER, false);
+		$res = curl_exec($ch);
+		curl_close($ch);
+		
 	}
 	
 }

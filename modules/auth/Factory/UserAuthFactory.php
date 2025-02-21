@@ -4,14 +4,12 @@ declare(strict_types=1);
 namespace Auth\Factory;
 
 use Auth\Models\AccessToken;
-use Carbon\Carbon;
 use Johncms\System\Http\Environment;
 use Johncms\System\Http\Request;
 use Johncms\Users\User;
-use Johncms\Users\UserFactory;
 use Psr\Container\ContainerInterface;
 
-class UserAuthFactory extends UserFactory
+class UserAuthFactory
 {
 	public const CookieId    = 'cutid';
 	public const CookieToken = 'cutn';
@@ -35,29 +33,59 @@ class UserAuthFactory extends UserFactory
 	 */
 	protected function getUserData(): User
 	{
+		$userPassword = md5($this->request->getCookie('cups', '', FILTER_SANITIZE_STRING));
+		$userId       = (int) $this->request->getCookie('cuid', 0, FILTER_SANITIZE_NUMBER_INT);
+		
+		if ($userId && $userPassword) {
+			return $this->authentication($userId, $userPassword);
+		}
+		
 		$userToken = $this->request->getCookie(static::CookieToken, '', FILTER_SANITIZE_STRING);
 		$userId    = (int) $this->request->getCookie(static::CookieId, 0, FILTER_SANITIZE_NUMBER_INT);
 		if ($userId && $userToken) {
-			return $this->authentication($userId, $userToken);
+			return $this->authenticationTelegram($userId, $userToken);
 		}
 		
 		return new User();
 	}
 	
-	private function authentication(int $userId, string $token): ?User
+	private function authentication(int $userId, string $userPassword): ?User
+	{
+		$user = (new User())->find($userId);
+		
+		if ($user) {
+			if ($userPassword === $user->password && $this->checkPermit($user)) {
+				$this->ipHistory($user); // Фиксируем историю IP
+				
+				return $user;
+			}
+			// Если авторизация не прошла
+			++$user->failed_login;
+			$user->save();
+		}
+		$this->userUnset();
+		
+		return new User();
+	}
+	
+	private function authenticationTelegram(int $userId, string $token): ?User
 	{
 		$user = (new User())->find($userId);
 		if ($user) {
+			$explode     = explode('|', $token);
+			$tokenId     = (int) ($explode[0] ?? 0);
 			$accessToken = (new AccessToken())
-				->where('token', '=', $token)
+				->where('id', '=', $tokenId)
 				->where('user_id', '=', $userId)
+				->where('expires_at', '>', date('Y-m-d H:i:s'))
+				->where('token', '=', $explode[1] ?? '')
+				->where('name', '=', 'Telegram')
 				->select(['expires_at', 'last_used_at', 'id'])
-				->latest()
-				->first();
-			if ($accessToken && $this->checkPermit($user) && Carbon::parse($accessToken->expires_at)->gt(date('Y-m-d H:i:s'))) {
+				->find($tokenId);
+			if ($accessToken && $this->checkPermit($user)) {
 				$path = $this->request->getUri()->getPath();
 				if ($path === '/login' || $path === '/register') {
-					$this->userUnset();
+					$this->userUnsetTelegram();
 					
 					return new User();
 				}
@@ -71,7 +99,7 @@ class UserAuthFactory extends UserFactory
 			++$user->failed_login;
 			$user->save();
 		}
-		$this->userUnset();
+		$this->userUnsetTelegram();
 		
 		return new User();
 	}
@@ -125,6 +153,17 @@ class UserAuthFactory extends UserFactory
 	 * @return void
 	 */
 	protected function userUnset(): void
+	{
+		setcookie('cuid', '');
+		setcookie('cups', '');
+	}
+	
+	/**
+	 * Уничтожаем данные авторизации юзера через телеграм
+	 *
+	 * @return void
+	 */
+	protected function userUnsetTelegram(): void
 	{
 		setcookie(static::CookieToken, '');
 		setcookie(static::CookieId, '');
