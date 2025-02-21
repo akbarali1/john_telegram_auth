@@ -24,7 +24,7 @@ use Johncms\System\Http\Request;
 use Johncms\Users\User;
 use League\Flysystem\FilesystemException;
 use News\Models\NewsArticle;
-use News\Models\NewsSearchIndex;
+use News\Models\TelegramUsers;
 use News\Models\NewsSection;
 use News\Utils\Helpers;
 
@@ -132,7 +132,7 @@ class AdminArticleController extends BaseAdminController
                     $created_article = (new NewsArticle())->create($data['fields']);
 
                     $search_text = $created_article->getRawOriginal('name') . strip_tags(' ' . $created_article->getRawOriginal('preview_text') . ' ' . $created_article->getRawOriginal('text'));
-                    (new NewsSearchIndex())->create(
+                    (new TelegramUsers())->create(
                         [
                             'article_id' => $created_article->id,
                             'text'       => $search_text,
@@ -233,7 +233,7 @@ class AdminArticleController extends BaseAdminController
                     $article->update($data['fields']);
 
                     $search_text = $data['fields']['name'] . strip_tags(' ' . $data['fields']['preview_text'] . ' ' . $data['fields']['text']);
-                    (new NewsSearchIndex())->updateOrCreate(
+                    (new TelegramUsers())->updateOrCreate(
                         ['article_id' => $article->id],
                         ['text' => $search_text]
                     );

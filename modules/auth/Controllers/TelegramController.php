@@ -1,0 +1,172 @@
+<?php
+
+/**
+ * Image Guestbook Controller Class
+ *
+ * @author Akbarali
+ * Date: 31.12.2021
+ * @telegram @kbarli
+ * @website http://akbarali.uz
+ * Email: Akbarali@uzhackersw.uz
+ * Johncms Профил: https://johncms.com/profile/?user=38217
+ * На тему: https://johncms.com/forum/?type=topic&id=12200
+ */
+
+declare(strict_types=1);
+
+namespace Auth\Controllers;
+
+use Auth\Factory\UserAuthFactory;
+use Auth\Models\AccessToken;
+use Auth\Models\TelegramUsers;
+use Carbon\Carbon;
+use Exception;
+use Johncms\Controller\BaseController;
+use Johncms\System\Http\Request;
+
+class TelegramController extends BaseController
+{
+	protected $botToken;
+	protected $secretKey;
+	protected $expires;
+	
+	/** @var string */
+	public const VERSION = 'Akbarali Telegram Login 0.1';
+	
+	public function __construct()
+	{
+		parent::__construct();
+		$this->botToken = di('config')['botToken'];
+		$this->expires  = di('config')['expiresToken'];
+	}
+	
+	/**
+	 * @throws Exception
+	 */
+	public function index(Request $requests): void
+	{
+		$request = json_decode($requests->getBody()->getContents(), true, 512, JSON_THROW_ON_ERROR);
+		if ($this->checkTelegramAuthorization($request)) {
+			$tgUser = (new TelegramUsers())->where('telegram_id', '=', $request['id'])->first();
+			if (!$tgUser) {
+				$this->response([
+					'success' => false,
+					'error'   => 'Authorization failed.',
+				]);
+			}
+			$loginUser = (new \Johncms\Users\User())->find($tgUser->user_id);
+			
+			if ($loginUser->failed_login >= 3) {
+				$this->response([
+					'success' => false,
+					'error'   => 'You can only access via a default login.',
+				]);
+			}
+			
+			$loginUser->update([
+				'failed_login' => 0,
+				'sestime'      => time(),
+			]);
+			
+			AccessToken::query()
+				->where('user_id', '=', $loginUser->id)
+				->where('telegram_id', '=', $tgUser->telegram_id)
+				->update([
+					"expires_at" => Carbon::now()->toDateTimeString(),
+				]);
+			/** @var AccessToken $accessToken */
+			$accessToken = AccessToken::query()->create([
+				'user_id'      => $loginUser->id,
+				'telegram_id'  => $tgUser->telegram_id,
+				'name'         => 'Telegram',
+				'token'        => 'undefined',
+				"user_agent"   => $_SERVER['HTTP_USER_AGENT'],
+				'ip_address'   => $_SERVER['REMOTE_ADDR'],
+				'last_used_at' => date('Y-m-d H:i:s'),
+				"expires_at"   => Carbon::now()->addDays($this->expires)->toDateTimeString(),
+			]);
+			
+			$token = $this->generateToken();
+			setcookie(UserAuthFactory::CookieId, (string) $loginUser->id, time() + $this->expires * 24 * 3600, '/');
+			setcookie(UserAuthFactory::CookieToken, $accessToken->id."|".$token, time() + $this->expires * 24 * 3600, '/');
+			
+			$accessToken->update([
+				'token' => $token,
+			]);
+			# TODO: add language support
+			$tgMessage = 'You have successfully logged in to the site.'.PHP_EOL;
+			$tgMessage .= 'ID: '.$loginUser->id.PHP_EOL;
+			$tgMessage .= 'Name: '.$loginUser->name.PHP_EOL;
+			$tgMessage .= 'User Agent: '.$_SERVER['HTTP_USER_AGENT'].PHP_EOL;
+			$tgMessage .= 'IP Address: '.$_SERVER['REMOTE_ADDR'].PHP_EOL;
+			
+			$this->sendMessage($tgUser->telegram_id, $tgMessage);
+			
+			$this->response([
+				'success' => true,
+			]);
+		}
+		
+		$this->response([
+			'success' => false,
+			'error'   => 'Authorization failed.',
+		]);
+	}
+	
+	private function response(array $data)
+	{
+		header('Content-Type: application/json');
+		die(json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+	}
+	
+	private function generateToken(): string
+	{
+		return hash_hmac('sha512', uniqid((string) mt_rand(), true), $this->botToken);
+	}
+	
+	/**
+	 * @throws Exception
+	 */
+	public function checkTelegramAuthorization(array $authData): bool
+	{
+		$check_hash = $authData['hash'];
+		unset($authData['hash']);
+		$data_check_arr = [];
+		foreach ($authData as $key => $value) {
+			$data_check_arr[] = $key.'='.$value;
+		}
+		sort($data_check_arr);
+		$data_check_string = implode("\n", $data_check_arr);
+		$secret_key        = hash('sha256', $this->botToken, true);
+		$hash              = hash_hmac('sha256', $data_check_string, $secret_key);
+		if (strcmp($hash, $check_hash) !== 0) {
+			return false;
+		}
+		if ((time() - $authData['auth_date']) > 86400) {
+			return false;
+		}
+		
+		return true;
+	}
+	
+	private function sendMessage($chatId, $text): void
+	{
+		$this->sendTelegram('sendMessage', [
+			'chat_id' => $chatId,
+			'text'    => $text,
+		]);
+	}
+	
+	private function sendTelegram($method, $response): void
+	{
+		$ch = curl_init('https://api.telegram.org/bot'.$this->botToken.'/'.$method);
+		curl_setopt($ch, CURLOPT_POST, 1);
+		curl_setopt($ch, CURLOPT_POSTFIELDS, $response);
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_HEADER, false);
+		$res = curl_exec($ch);
+		curl_close($ch);
+		
+	}
+	
+}
