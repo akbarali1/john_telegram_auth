@@ -34,7 +34,6 @@ $user = di(User::class);
 $tools = di(Tools::class);
 $view = di(Render::class);
 $route = di('route');
-
 /** @var NavChain $nav_chain */
 $nav_chain = di(NavChain::class);
 
