@@ -157,7 +157,7 @@ class TelegramController extends BaseController
 		]);
 	}
 	
-	private function sendTelegram($method, $response): void
+	private function sendTelegram(string $method, $response): void
 	{
 		$ch = curl_init('https://api.telegram.org/bot'.$this->botToken.'/'.$method);
 		curl_setopt($ch, CURLOPT_POST, 1);
