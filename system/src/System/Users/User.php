@@ -14,18 +14,19 @@ namespace Johncms\System\Users;
 
 class User extends AbstractUserProperties
 {
-    public function __construct(array $properties = [])
-    {
-        foreach ($properties as $key => $value) {
-            $this->$key = $value;
-        }
-
-        $this->config = new UserConfig($this->set_user);
-    }
-
-    public function isValid(): bool
-    {
-        $config = di('config')['johncms'];
-        return ($this->id > 0 && $this->preg == 1 && (empty($config['user_email_confirmation']) || $this->email_confirmed == 1));
-    }
+	public function __construct(array $properties = [])
+	{
+		foreach ($properties as $key => $value) {
+			$this->$key = $value;
+		}
+		
+		$this->config = new UserConfig($this->set_user);
+	}
+	
+	public function isValid(): bool
+	{
+		$config = di('config')['johncms'];
+		
+		return ($this->id > 0 && $this->preg == 1 && (empty($config['user_email_confirmation']) || $this->email_confirmed == 1));
+	}
 }

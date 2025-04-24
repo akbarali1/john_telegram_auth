@@ -90,6 +90,22 @@ $errors = $data['errors'];
                 <?php endif ?>
                 <div class="small text-muted"><?= __('Max. 50') ?></div>
             </div>
+
+            <div class="form-group">
+                <label for="telegram_id"><?= __('Telegram ID') ?></label>
+                <input type="number"
+                       class="form-control <?= (isset($errors['telegram_id']) ? 'is-invalid' : '') ?>"
+                       name="telegram_id"
+                       id="telegram_id"
+                       value="<?= $data['form_data']['telegram_id'] ?? "" ?>"
+                       placeholder="<?= __('Telegram ID') ?>"
+                       maxlength="50"
+                >
+		        <?php if (isset($errors['telegram_id'])): ?>
+                    <div class="invalid-feedback"><?= implode('<br>', $errors['telegram_id']) ?></div>
+		        <?php endif ?>
+            </div>
+            
             <div class="mb-3">
                 <div class="mb-2">
                     <?= __('Avatar') ?>
